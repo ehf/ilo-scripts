@@ -28,6 +28,7 @@ shopt -s extglob
 check_for_required_utilities () {
     test -x /usr/bin/openssl  || ( printf "openssl not available\n" && exit 1 )
     test -x ${JQ} || ( printf "${JQ} not available\n" && exit 1 )
+    test -x /usr/bin/nc || ( printf "nc not available\n" && exit 1 )
 }
 
 
