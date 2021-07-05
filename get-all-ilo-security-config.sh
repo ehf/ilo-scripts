@@ -13,7 +13,7 @@
 ## >
 ##
 
-exec 2>/dev/null
+#exec 2>/dev/null
 
 ilo_host="$1"
 ilo_host_ssl_port='443'
@@ -21,19 +21,27 @@ ilo_dns_name="$2"
 curl_config_home="$HOME/ilo"
 curl_config="${curl_config_home}/.curl_config"
 JQ="$HOME/bin/jq"
-OPENSSL="/usr/bin/openssl"
 
 shopt -s extglob
 
 
 check_for_required_utilities () {
-    test -x ${OPENSSL}  || ( printf "${OPENSSL} not available\n" && exit 1 )
+    test -x /usr/bin/openssl  || ( printf "openssl not available\n" && exit 1 )
     test -x ${JQ} || ( printf "${JQ} not available\n" && exit 1 )
 }
 
 
+check_ssh_conn() {
+  nc -v -z -w2 ${ilo_host} 22 >/dev/null 2>&1
+  if [[ $? -ne 0 ]]; then
+     printf "${ilo_host},,,,,,,,,,,,,ssh_conn_refused,pw_conn_refused\n"
+     exit 1
+  fi
+}
+
+
 check_ilo_conn () {
-   host_ilo_conn_status=$(curl -m 10 -k -s -K ${curl_config} -w "%{http_code}" https://${ilo_host}/redfish/v1/Managers/1/ -o /dev/null)
+   host_ilo_conn_status=$(curl -m 10 -k -s -K ${curl_config} -w "%{http_code}" https://${ilo_host}/redfish/v1/Managers/1/ -o /dev/null 2>&1)
    case "${host_ilo_conn_status}" in
         401)
            curl_config="${curl_config}_2"
@@ -54,16 +62,25 @@ check_ilo_conn () {
    esac
 }
 
+get_ssh_config () {
+    config_ssh_output=$( \
+       ( \
+         ssh -o BatchMode=yes -o MACs=hmac-sha2-512 ${ilo_host} -l Administrator 2>&1 | awk -F'server' '{print $2}' | sed 's/,/:/g' | xargs | tr -d '[:space:]'
+         printf "\n"
+         ssh -o BatchMode=yes -o Ciphers=blowfish-cbc ${ilo_host} -l Administrator 2>&1 | awk -F'server' '{print $2}' | sed 's/,/:/g' | xargs | tr -d '[:space:]'
+       ) | tr '\r\n' ',' \
+    )
+}
 
 
 get_ilo_info () {
-    host_firmware_version=$(curl -m 10 -k -s -K ${curl_config} https://${ilo_host}/redfish/v1/Managers/1/ | ${JQ} -r .FirmwareVersion | xargs)
+    host_firmware_version=$(curl -m 10 -k -s -K ${curl_config} https://${ilo_host}/redfish/v1/Managers/1/ | ${JQ} -r .FirmwareVersion 2>&1 | xargs)
     if [[ ${host_firmware_version} =~ "iLO 5" ]]; then
        redfish_oem="Hpe"
     elif [[ ${host_firmware_version} =~ "iLO 4" ]]; then
        redfish_oem="Hp"
     else
-       printf "${ilo_host},,,,,,,,,,${host_ilo_conn_status},invalid host firmware version collected (not 'iLO 4' or 'iLO 5'),${host_ilo_pw}\n"
+       printf "${ilo_host},,,,,,,,,,,,${host_ilo_conn_status},invalid host firmware version collected (not 'iLO 4' or 'iLO 5'),${host_ilo_pw}\n"
        exit 1
     fi
 
@@ -96,19 +113,21 @@ get_encryption () {
 
 
 get_ssl_cert_signature_algorithm () {
-   signature_algorithm=$(echo '' | ${OPENSSL} s_client -connect ${ilo_host}:${ilo_host_ssl_port} -servername ${ilo_host} 2>/dev/null | ${OPENSSL} x509 -noout -text | grep 'Signature Algorithm' | uniq | xargs)
+   signature_algorithm=$(echo '' | openssl s_client -connect ${ilo_host}:${ilo_host_ssl_port} -servername ${ilo_host} 2>/dev/null | openssl x509 -noout -text | grep 'Signature Algorithm' | uniq | xargs)
 }
 
 
 get_ssl_cert_validity () {
-   validity=$(echo '' | ${OPENSSL} s_client -host ${ilo_host} -port ${ilo_host_ssl_port} 2>/dev/null | ${OPENSSL} x509 -noout -text | grep -A2 Validity | tail -n +2 | xargs | sed 's/Not After/,Not After/g' )
+   validity=$(echo '' | openssl s_client -host ${ilo_host} -port ${ilo_host_ssl_port} 2>/dev/null |  openssl x509 -noout -text | grep -A2 Validity | tail -n +2 | xargs | sed 's/Not After/,Not After/g' )
 }
 
 
 
 # run it
 check_for_required_utilities
+check_ssh_conn
 check_ilo_conn
+get_ssh_config
 get_ilo_info
 get_encryption
 get_ssl_cert_signature_algorithm
@@ -122,6 +141,7 @@ printf "${host_firmware_version},"
 printf "${encryption},"
 printf "${signature_algorithm},"
 printf "${validity},"
+printf "${config_ssh_output},"
 printf "${host_manager_type_status},"
 printf "${host_ilo_conn_status},"
 printf "${host_ilo_health_status},"
