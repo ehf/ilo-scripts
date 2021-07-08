@@ -1,0 +1,64 @@
+#!/usr/bin/expect -f
+
+log_user 0
+set timeout 10
+set send_slow {1 0.02}
+
+set user [lindex $argv 0]
+set ilo [lindex $argv 1]
+#set password [lindex $argv 1]
+#set ilo [lindex $argv 2]
+
+set pwfile [open ".c" r]
+set pw [read $pwfile]
+close $pwfile
+
+set password $pw
+
+spawn ssh -o "StrictHostKeyChecking=no" -o "GlobalKnownHostsFile=/dev/null" -o "UserKnownHostsFile=/dev/null" $ilo -l $user
+expect {
+    "Administrator@$ilo's password:" {
+       send "$password\r"
+    }
+    "ssh: connect to host $ilo port 22: Connection refused" {
+       puts "$ilo,connection_refused"
+       exit
+    }
+    "ssh: connect to host $ilo port 22: No route to host" {
+       puts "$ilo,no_route_to_host"
+       exit
+    }
+    timeout {
+       puts "$ilo,connection_timeout"
+       exit
+    }
+}
+expect "</>hpiLO->"
+#send -s "vsp" ; sleep 1 ; send -s "\r"; sleep 1
+#expect "* login:"
+
+send -s "show /map1/enetport1 SystemName" ; send -s "\r"; sleep 1
+
+expect {
+    "SystemName=\[A-Z]*" {
+       #puts "at login prompt"
+    }
+    "\[a-z0-9].*#" {
+       #puts "already logged in"
+    }
+    timeout {
+       puts "$ilo,unknown_hostname"
+    }
+}
+
+
+log_user 1
+if {[regexp -line {.*SystemName=.*} $expect_out(buffer) console_prompt]} {
+   set console_prompt [string trimleft $console_prompt]
+   puts "$ilo,$console_prompt"
+}
+
+send -s "exit"
+
+
+exit 0
