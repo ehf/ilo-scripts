@@ -17,7 +17,7 @@ set password $pw
 
 spawn ssh -o "StrictHostKeyChecking=no" -o "GlobalKnownHostsFile=/dev/null" -o "UserKnownHostsFile=/dev/null" $ilo -l $user
 expect {
-    "Administrator@$ilo's password:" {
+    "$user@$ilo's password:" {
        send "$password\r"
     }
     "ssh: connect to host $ilo port 22: Connection refused" {
