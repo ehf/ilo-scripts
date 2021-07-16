@@ -40,6 +40,8 @@ case "${host_ilo_status}" in
         000)
            curl_config="${curl_config}"
            host_ilo_pw="pw_timeout"
+           printf "${ilo_host},,,,,,,,${host_ilo_pw},\n"
+           exit 1
            ;;
         *)
            curl_config="${curl_config}"
@@ -50,9 +52,9 @@ esac
 
 
 host_firmware_version=$(curl -m 10 -k -s -K ${curl_config_home}/${curl_config} https://${ilo_host}/redfish/v1/Managers/1/ | ${JQ} -r .FirmwareVersion | xargs)
-host_ilo_fqdn=$(curl -m 15 -k -s -K ${curl_config_home}/${curl_config} https://${ilo_host}/redfish/v1/Managers/1/EthernetInterfaces/ | ${JQ} -r '.Items[0].FQDN // empty' | xargs)
+host_ilo_fqdn=$(curl -m 10 -k -s -K ${curl_config_home}/${curl_config} https://${ilo_host}/redfish/v1/Managers/1/EthernetInterfaces/ | ${JQ} -r '.Items[0].FQDN // empty' | xargs)
 host_system_info=$(curl -m 10 -k -s -K ${curl_config_home}/${curl_config} https://${ilo_host}/redfish/v1/Systems/1/ | ${JQ} -r ' . | [.HostName, .Model] | join (",")' | xargs )
-
+powerstate=$(curl -m 10 -k -s -K ${curl_config_home}/${curl_config} https://${ilo_host}/redfish/v1/Systems/1/ | ${JQ} -r .PowerState)
 
 if [[ ${host_firmware_version} =~ "iLO 5" ]]; then
     redfish_oem="Hpe"
@@ -68,7 +70,7 @@ host_manager_type_status=$(curl -m 10 -k -s -K ${curl_config_home}/${curl_config
 
 
 
-printf "${host_ilo_ip},${ilo_host},${host_ilo_fqdn},${host_system_info},${host_firmware_version},${host_manager_type_status},${host_ilo_health_status},${host_ilo_pw}\n"
+printf "${host_ilo_ip},${ilo_host},${host_ilo_fqdn},${host_system_info},${host_firmware_version},${host_manager_type_status},${host_ilo_health_status},${host_ilo_pw},${powerstate}\n"
 
 exit 0
 
