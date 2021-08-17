@@ -33,6 +33,11 @@ case "${host_ilo_status}" in
            curl_config="${curl_config}_2"
            host_ilo_pw="pw_2"
            ;;
+        404)
+           curl_config="${curl_config}"
+           host_ilo_pw="pw_conn_refused"
+           printf "${ilo_host},,,,,,,,${host_ilo_pw},\n"
+           ;;
         200)
            curl_config="${curl_config}"
            host_ilo_pw="pw_1"
